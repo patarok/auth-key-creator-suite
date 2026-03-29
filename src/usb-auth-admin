@@ -1,22 +1,41 @@
 #!/bin/bash
 # --- USB-AUTH ADMIN & INVENTORY TOOL ---
+# Zeigt registrierte USB-Sticks und deren Nutzungsdaten.
 # bitte in '/usr/local/bin/.' ablegen.
+
+# Überprüfe Root-Rechte
+[ $EUID -ne 0 ] && echo "Bitte als root ausführen!" && exit 1
 
 DB="/etc/usb-auth/inventory.db"
 LOG="/var/log/usb-auth-usage.log"
 PUB_DIR="/etc/usb-auth/pubkeys"
 
-# Header
-echo -e "\n--- Registrierte Auth-Sticks ---"
-printf "%-15s | %-36s | %-20s | %-10s\n" "Label" "UUID" "Letzte Nutzung" "Status"
-echo "---------------------------------------------------------------------------------------"
-
+# Überprüfe ob Datenbank existiert
 if [ ! -f "$DB" ]; then
-    echo "Keine registrierten Sticks in $DB gefunden."
+    echo "Keine registrierten Sticks gefunden."
+    echo "Installation: Führe install-usb-auth.sh aus um eine Stick zu registrieren."
     exit 0
 fi
 
+# Header
+echo ""
+echo "=== Registrierte USB-Auth Sticks ==="
+echo ""
+printf "%-20s | %-36s | %-20s | %-12s | Mount\n" "Label" "UUID" "Letzte Nutzung" "Status" ""
+echo "---------------------------------------------------------------------------------------------------"
+
+# Zähler
+total=0
+active=0
+warnings=0
+
 while IFS="|" read -r label uuid usb_id; do
+    # Whitespace trimmen
+    label="${label#"${label%%[![:space:]]*}"}"
+    uuid="${uuid#"${label%%[![:space:]]*}"}"
+    
+    total=$((total + 1))
+    
     # Letzten Zeitstempel aus dem Log extrahieren
     last_seen=$(grep "$uuid" "$LOG" 2>/dev/null | tail -n 1 | cut -d'|' -f1)
     
@@ -25,22 +44,52 @@ while IFS="|" read -r label uuid usb_id; do
         status="NEU"
     else
         # Tage seit letzter Nutzung berechnen
-        last_ts=$(date -d "$last_seen" +%s)
+        last_ts=$(date -d "$last_seen" +%s 2>/dev/null || echo 0)
         now_ts=$(date +%s)
-        diff_days=$(( (now_ts - last_ts) / 86400 ))
         
-        if [ $diff_days -gt 21 ]; then
-            status="WARNUNG"
+        if [ "$last_ts" -eq 0 ]; then
+            diff_days="?"
+            status="?"
         else
-            status="OK"
+            diff_days=$(( (now_ts - last_ts) / 86400 ))
+            
+            if [ "$diff_days" -eq 0 ]; then
+                status="OK (heute)"
+            elif [ "$diff_days" -le 21 ]; then
+                status="OK"
+            else
+                status="WARNUNG"
+                warnings=$((warnings + 1))
+            fi
         fi
     fi
     
     # Prüfen ob physisch präsent
-    presence=" "
-    lsblk -no UUID | grep -q "$uuid" && presence="*"
+    mount_status=" "
+    if lsblk -no UUID 2>/dev/null | grep -q "$uuid"; then
+        mount_status="✓ gemountet"
+        active=$((active + 1))
+    else
+        mount_status=" "
+    fi
 
-    printf "%-15s | %-36s | %-20s | %-10s\n" "$label$presence" "$uuid" "$last_seen" "$status"
+    printf "%-20s | %-36s | %-20s | %-12s | %s\n" "$label" "$uuid" "$last_seen" "$status" "$mount_status"
 done < "$DB"
 
-echo -e "\n(*) = Stick ist aktuell im System erkannt."
+echo "---------------------------------------------------------------------------------------------------"
+echo ""
+echo "Zusammenfassung:"
+echo "  Insgesamt registriert: $total Stick(s)"
+echo "  Aktiv gemountet:       $active Stick(s)"
+[ "$warnings" -gt 0 ] && echo "  Warnungen:             $warnings Stick(s) (>21 Tage nicht genutzt)"
+echo ""
+
+# Zeige letzte Authentifizierungen
+if [ -f "$LOG" ]; then
+    echo "Letzte 5 Authentifizierungen:"
+    echo "---"
+    tail -n 5 "$LOG" | while read line; do
+        echo "  $line"
+    done
+    echo ""
+fi

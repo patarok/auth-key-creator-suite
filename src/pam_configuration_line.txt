@@ -1,19 +1,59 @@
-Das ist kein Skript, sondern der Eintrag für die PAM-Dateien.
+=== PAM CONFIGURATION LINES ===
+Dies ist keine ausführbare Datei, sondern ein Referenzdokument für PAM-Konfiguration.
 
-Ziel-Dateien: /etc/pam.d/polkit-1 (bspw. f. tighte 1Password integration des auth-sticks) 
-..und /etc/pam.d/sudo (Terminal)
+ZIELVERZEICHNISSE:
+- /etc/pam.d/sudo          (für Terminal/Kommandozeile)
+- /etc/pam.d/polkit-1      (für grafische Autorisierungen/1Password Integration)
 
 
-# Füge in den Dateien diese Zeile als ALLERERSTE auth-Zeile ein:
-auth sufficient pam_exec.so /usr/bin/usb-auth-check.sh
-# steht hier statt 'sufficient' dort 'required' eintragen... dann wird es so sein, 
-# dass die Bequemlichkeit weg ist wir aber eine andere Herangehensweise haben und 
-# den stick sozusagen als Besitz-Auth zusaetzlich verwenden koennen zum Passwort ...
-# quasi als versicherung. somit koennte dann jemand der zwar das Passwort hat, 
-#dann so nichts anrichten, wenn der Stick nicht steckt... :)
-
-# andersrum, wenn wir einfach nur schaerfer werden wollen aber der stick(zw. Bequemlichkeit)
-# genug sein soll fuer den Auth dann muessten wir generell  :
+OPTION 1: Bequemlichkeit (nur Stick erforderlich)
+=================================================
 auth [success=done new_authtok_reqd=done default=die] pam_exec.so /usr/bin/usb-auth-check.sh
 
-# statt der line oben eintragen.
+Verhalten:
+- Wenn Stick präsent UND korrekt: Authentifizierung erfolgreich (kein Passwort nötig)
+- Wenn Stick nicht präsent: Authentifizierung fehlgeschlagen (Zugriff verweigert)
+- Logi: "Stick-only" Authentifizierung -> am bequemsten, aber Stick ist Pflicht
+
+Eintrag-Position: ERSTE auth-Zeile (vor bestehenden auth-Linien)
+Sicherheit: ⚠️ NIEDRIG - Nur Besitz (USB-Stick) wird überprüft
+
+
+OPTION 2: Sicherheit (Stick + Passwort erforderlich)
+=====================================================
+auth required pam_exec.so /usr/bin/usb-auth-check.sh
+
+Verhalten:
+- Wenn Stick nicht präsent: Authentifizierung fehlgeschlagen sofort
+- Wenn Stick präsent: Passwort wird trotzdem abgefragt
+- Logik: Stick ist MANDATORISCH, zusätzlich zum Passwort
+
+Eintrag-Position: ERSTE auth-Zeile
+Sicherheit: ✓ HOCH - Zwei-Faktor (Besitz + Wissen)
+Use Case: Hochsensible Systeme, wo Stick als Hardware-Token dient
+
+
+OPTION 3: Fallback (Stick bevorzugt, Passwort als Fallback)
+============================================================
+auth sufficient pam_exec.so /usr/bin/usb-auth-check.sh
+
+Verhalten:
+- Wenn Stick präsent UND korrekt: Sofort erfolgreich
+- Wenn Stick nicht präsent: Passwort-Authentifizierung wird verwendet
+- Logik: "Stick ist optional", dient als Bequemlichkeits-Shortcut
+
+Eintrag-Position: VOR anderen auth-Linien (vor pam_unix.so etc.)
+Sicherheit: ✓ MITTEL - Stick optional, Passwort Fallback
+Use Case: Schrittweise Einführung, Benutzer vergessen Stick
+
+
+EMPFEHLUNG FÜR STANDARD-SETUP:
+=============================
+Verwende Option 3 (sufficient) für den Anfang:
+  - Sichere bestehende Passwort-Authentifizierung nicht aus
+  - Nutzer können Stick vergessen, ohne locked zu sein
+  - Graduelle Migrationsstrategie
+
+Später zu Option 1 migrieren (strict) wenn:
+  - Alle Nutzer Sticks haben und diese immer dabei sind
+  - Organisatorische Policy das verlangt
