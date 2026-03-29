@@ -191,3 +191,5 @@ This suite implements hardware-token authentication as a security supplement to 
 - ✅ Maintains password auth as fallback (depending on config)
 - ✅ Provides audit trail for compliance
 - ⚠️ Requires users to always carry USB sticks (depending on config)
+
+Note: this can make your old Lexar Thumbprint Jumpstick quite a proper Yubikey competitor... if you dont believe in spaceships. :>
