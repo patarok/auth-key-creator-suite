@@ -1,0 +1,19 @@
+Das ist kein Skript, sondern der Eintrag für die PAM-Dateien.
+
+Ziel-Dateien: /etc/pam.d/polkit-1 (bspw. f. tighte 1Password integration des auth-sticks) 
+..und /etc/pam.d/sudo (Terminal)
+
+
+# Füge in den Dateien diese Zeile als ALLERERSTE auth-Zeile ein:
+auth sufficient pam_exec.so /usr/bin/usb-auth-check.sh
+# steht hier statt 'sufficient' dort 'required' eintragen... dann wird es so sein, 
+# dass die Bequemlichkeit weg ist wir aber eine andere Herangehensweise haben und 
+# den stick sozusagen als Besitz-Auth zusaetzlich verwenden koennen zum Passwort ...
+# quasi als versicherung. somit koennte dann jemand der zwar das Passwort hat, 
+#dann so nichts anrichten, wenn der Stick nicht steckt... :)
+
+# andersrum, wenn wir einfach nur schaerfer werden wollen aber der stick(zw. Bequemlichkeit)
+# genug sein soll fuer den Auth dann muessten wir generell  :
+auth [success=done new_authtok_reqd=done default=die] pam_exec.so /usr/bin/usb-auth-check.sh
+
+# statt der line oben eintragen.

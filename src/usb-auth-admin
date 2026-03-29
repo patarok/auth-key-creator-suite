@@ -1,0 +1,46 @@
+#!/bin/bash
+# --- USB-AUTH ADMIN & INVENTORY TOOL ---
+# bitte in '/usr/local/bin/.' ablegen.
+
+DB="/etc/usb-auth/inventory.db"
+LOG="/var/log/usb-auth-usage.log"
+PUB_DIR="/etc/usb-auth/pubkeys"
+
+# Header
+echo -e "\n--- Registrierte Auth-Sticks ---"
+printf "%-15s | %-36s | %-20s | %-10s\n" "Label" "UUID" "Letzte Nutzung" "Status"
+echo "---------------------------------------------------------------------------------------"
+
+if [ ! -f "$DB" ]; then
+    echo "Keine registrierten Sticks in $DB gefunden."
+    exit 0
+fi
+
+while IFS="|" read -r label uuid usb_id; do
+    # Letzten Zeitstempel aus dem Log extrahieren
+    last_seen=$(grep "$uuid" "$LOG" 2>/dev/null | tail -n 1 | cut -d'|' -f1)
+    
+    if [ -z "$last_seen" ]; then
+        last_seen="Nie"
+        status="NEU"
+    else
+        # Tage seit letzter Nutzung berechnen
+        last_ts=$(date -d "$last_seen" +%s)
+        now_ts=$(date +%s)
+        diff_days=$(( (now_ts - last_ts) / 86400 ))
+        
+        if [ $diff_days -gt 21 ]; then
+            status="WARNUNG"
+        else
+            status="OK"
+        fi
+    fi
+    
+    # Prüfen ob physisch präsent
+    presence=" "
+    lsblk -no UUID | grep -q "$uuid" && presence="*"
+
+    printf "%-15s | %-36s | %-20s | %-10s\n" "$label$presence" "$uuid" "$last_seen" "$status"
+done < "$DB"
+
+echo -e "\n(*) = Stick ist aktuell im System erkannt."
